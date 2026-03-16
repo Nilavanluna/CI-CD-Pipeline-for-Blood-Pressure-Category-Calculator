@@ -4,6 +4,11 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
+<PropertyGroup>
+  <CollectCoverage>true</CollectCoverage>
+  <CoverletOutputFormat>cobertura</CoverletOutputFormat>
+  <Exclude>[*]BPCalculator.Pages.Pages_*,[*]BPCalculator.Pages.ErrorModel,[*]BPCalculator.Pages.PrivacyModel,[*]BPCalculator.Program,[*]BPCalculator.Startup</Exclude>
+</PropertyGroup>
   <ItemGroup>
     <Compile Remove="Data\**" />
     <Content Remove="Data\**" />
