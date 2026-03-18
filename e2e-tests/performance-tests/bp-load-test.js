@@ -18,11 +18,10 @@ export default function () {
     __ENV.APP_URL ||
     'https://bp-staging-nilavan-epaebkbed7gah2ac.switzerlandnorth-01.azurewebsites.net'
 
-  // Test GET request - load the page
   const getRes = http.get(BASE_URL)
   check(getRes, {
     'GET status 200': (r) => r.status === 200,
-    'page contains BP Calculator': (r) => r.body.includes('BP'),
+    'page contains BP': (r) => r.body.includes('BP'),
   })
 
   sleep(1)
