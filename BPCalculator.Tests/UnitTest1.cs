@@ -2,6 +2,8 @@
 using BPCalculator;
 using BPCalculator.Pages;
 using FluentAssertions;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Http;
@@ -16,9 +18,9 @@ namespace BPCalculator.Tests
         // ── CATEGORY TESTS ──────────────────────────────────────────
 
         [Theory]
-        [InlineData(85, 55, BPCategory.Low)]      // normal low
-        [InlineData(89, 59, BPCategory.Low)]      // boundary — just below ideal
-        [InlineData(80, 60, BPCategory.Low)]      // systolic low even if diastolic ok
+        [InlineData(85, 55, BPCategory.Low)]
+        [InlineData(89, 59, BPCategory.Low)]
+        [InlineData(80, 60, BPCategory.Low)]
         public void Category_ReturnsLow_WhenBPIsLow(int systolic, int diastolic, BPCategory expected)
         {
             var bp = new BloodPressure { Systolic = systolic, Diastolic = diastolic };
@@ -26,9 +28,9 @@ namespace BPCalculator.Tests
         }
 
         [Theory]
-        [InlineData(90,  60,  BPCategory.Ideal)]  // boundary — lower limit inclusive
-        [InlineData(110, 70,  BPCategory.Ideal)]  // normal ideal
-        [InlineData(119, 79,  BPCategory.Ideal)]  // boundary — just below pre-high
+        [InlineData(90,  60,  BPCategory.Ideal)]
+        [InlineData(110, 70,  BPCategory.Ideal)]
+        [InlineData(119, 79,  BPCategory.Ideal)]
         public void Category_ReturnsIdeal_WhenBPIsIdeal(int systolic, int diastolic, BPCategory expected)
         {
             var bp = new BloodPressure { Systolic = systolic, Diastolic = diastolic };
@@ -36,9 +38,9 @@ namespace BPCalculator.Tests
         }
 
         [Theory]
-        [InlineData(120, 80,  BPCategory.PreHigh)] // boundary — lower limit inclusive
-        [InlineData(130, 85,  BPCategory.PreHigh)] // normal pre-high
-        [InlineData(139, 89,  BPCategory.PreHigh)] // boundary — just below high
+        [InlineData(120, 80,  BPCategory.PreHigh)]
+        [InlineData(130, 85,  BPCategory.PreHigh)]
+        [InlineData(139, 89,  BPCategory.PreHigh)]
         public void Category_ReturnsPreHigh_WhenBPIsPreHigh(int systolic, int diastolic, BPCategory expected)
         {
             var bp = new BloodPressure { Systolic = systolic, Diastolic = diastolic };
@@ -46,9 +48,9 @@ namespace BPCalculator.Tests
         }
 
         [Theory]
-        [InlineData(140, 90,  BPCategory.High)]   // boundary — lower limit inclusive
-        [InlineData(160, 95,  BPCategory.High)]   // normal high
-        [InlineData(180, 100, BPCategory.High)]   // maximum valid values
+        [InlineData(140, 90,  BPCategory.High)]
+        [InlineData(160, 95,  BPCategory.High)]
+        [InlineData(180, 100, BPCategory.High)]
         public void Category_ReturnsHigh_WhenBPIsHigh(int systolic, int diastolic, BPCategory expected)
         {
             var bp = new BloodPressure { Systolic = systolic, Diastolic = diastolic };
@@ -58,9 +60,9 @@ namespace BPCalculator.Tests
         // ── ISVALID TESTS ────────────────────────────────────────────
 
         [Theory]
-        [InlineData(120, 80)]   // normal valid
-        [InlineData(90,  60)]   // boundary valid
-        [InlineData(150, 95)]   // high but valid
+        [InlineData(120, 80)]
+        [InlineData(90,  60)]
+        [InlineData(150, 95)]
         public void IsValid_ReturnsTrue_WhenSystolicGreaterThanDiastolic(int systolic, int diastolic)
         {
             var bp = new BloodPressure { Systolic = systolic, Diastolic = diastolic };
@@ -68,8 +70,8 @@ namespace BPCalculator.Tests
         }
 
         [Theory]
-        [InlineData(80,  90)]   // diastolic higher — invalid
-        [InlineData(70,  70)]   // equal — invalid
+        [InlineData(80,  90)]
+        [InlineData(70,  70)]
         public void IsValid_ReturnsFalse_WhenSystolicNotGreaterThanDiastolic(int systolic, int diastolic)
         {
             var bp = new BloodPressure { Systolic = systolic, Diastolic = diastolic };
@@ -129,30 +131,38 @@ namespace BPCalculator.Tests
 
         // ── PAGE MODEL TESTS ──────────────────────────────────────────
 
-        private BloodPressureModel CreateModel()
+private static TelemetryClient CreateTelemetryClient()
 {
-    var model       = new BloodPressureModel();
-    var httpContext = new DefaultHttpContext();
-    var modelState  = new ModelStateDictionary();
-    var actionContext = new ActionContext(
-        httpContext,
-        new RouteData(),
-        new PageActionDescriptor(),
-        modelState);
-    var modelMetadata = new EmptyModelMetadataProvider();
-    var viewData    = new ViewDataDictionary(modelMetadata, modelState);
-    var tempData    = new TempDataDictionary(httpContext,
-                        Mock.Of<ITempDataProvider>());
-
-    model.PageContext = new PageContext(actionContext)
+    return new TelemetryClient(new TelemetryConfiguration
     {
-        ViewData = viewData
-    };
-    model.TempData = tempData;
-
-    return model;
+        ConnectionString = "InstrumentationKey=00000000-0000-0000-0000-000000000000"
+    });
 }
 
+
+        private BloodPressureModel CreateModel()
+        {
+            var model       = new BloodPressureModel(CreateTelemetryClient());
+            var httpContext  = new DefaultHttpContext();
+            var modelState   = new ModelStateDictionary();
+            var actionContext = new ActionContext(
+                httpContext,
+                new RouteData(),
+                new PageActionDescriptor(),
+                modelState);
+            var modelMetadata = new EmptyModelMetadataProvider();
+            var viewData     = new ViewDataDictionary(modelMetadata, modelState);
+            var tempData     = new TempDataDictionary(httpContext,
+                                Mock.Of<ITempDataProvider>());
+
+            model.PageContext = new PageContext(actionContext)
+            {
+                ViewData = viewData
+            };
+            model.TempData = tempData;
+
+            return model;
+        }
 
         [Fact]
         public void OnGet_SetsDefaultBPValues()
