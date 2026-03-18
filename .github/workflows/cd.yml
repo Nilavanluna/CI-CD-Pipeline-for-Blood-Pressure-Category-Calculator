@@ -54,7 +54,7 @@ jobs:
       - name: Run E2E Tests
         run: cd e2e-tests && npx playwright test
         env:
-          APP_URL: 'https://bp-qa-nilavan.azurewebsites.net'
+          APP_URL: 'https://bp-qa-nilavan-febzavhrbuamh3g8.switzerlandnorth-01.azurewebsites.net'
 
   deploy-staging:
     name: Deploy to Staging
@@ -97,7 +97,7 @@ jobs:
       - name: Run k6 Load Test
         run: k6 run performance-tests/bp-load-test.js
         env:
-          APP_URL: 'https://bp-staging-nilavan.azurewebsites.net'
+          APP_URL: 'https://bp-staging-nilavan-epaebkbed7gah2ac.switzerlandnorth-01.azurewebsites.net'
 
   security-dast:
     name: OWASP ZAP Pen Test
@@ -148,7 +148,7 @@ jobs:
       - name: Check App is Responding
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://bp-prod-nilavan.azurewebsites.net)
+            https://bp-prod-nilavan-g4dsfqatf4b5g5hh.switzerlandnorth-01.azurewebsites.net)
           if [ "$STATUS" != "200" ]; then
             echo "Production health check failed: HTTP $STATUS"
             exit 1
