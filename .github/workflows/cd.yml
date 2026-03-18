@@ -1,8 +1,9 @@
 name: CD Pipeline
 
 on:
+  workflow_dispatch:
   workflow_run:
-    workflows: ['CI Pipeline']
+    workflows: ["CI Pipeline"]
     branches: [master]
     types: [completed]
 
@@ -95,7 +96,7 @@ jobs:
           sudo mv k6 /usr/local/bin/
 
       - name: Run k6 Load Test
-        run: k6 run performance-tests/bp-load-test.js
+          run: k6 run $GITHUB_WORKSPACE/performance-tests/bp-load-test.js
         env:
           APP_URL: 'https://bp-staging-nilavan-epaebkbed7gah2ac.switzerlandnorth-01.azurewebsites.net'
 
