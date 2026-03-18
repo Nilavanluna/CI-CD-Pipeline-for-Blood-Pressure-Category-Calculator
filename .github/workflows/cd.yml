@@ -1,0 +1,156 @@
+name: CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ['CI Pipeline']
+    branches: [master]
+    types: [completed]
+
+jobs:
+  deploy-qa:
+    name: Deploy to QA
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    environment: qa
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Publish App
+        run: dotnet publish BPCalculator/BPCalculator.csproj --configuration Release --output ./publish
+
+      - name: Deploy to Azure QA
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'bp-qa-nilavan'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_QA }}
+          package: './publish'
+
+  e2e-tests:
+    name: E2E Tests on QA
+    runs-on: ubuntu-latest
+    needs: deploy-qa
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright
+        run: |
+          cd e2e-tests
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run E2E Tests
+        run: cd e2e-tests && npx playwright test
+        env:
+          APP_URL: 'https://bp-qa-nilavan.azurewebsites.net'
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Publish App
+        run: dotnet publish BPCalculator/BPCalculator.csproj --configuration Release --output ./publish
+
+      - name: Deploy to Azure Staging
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'bp-staging-nilavan'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_STAGING }}
+          package: './publish'
+
+  performance-test:
+    name: Performance Test on Staging
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          curl https://github.com/grafana/k6/releases/download/v0.49.0/k6-v0.49.0-linux-amd64.tar.gz -L | tar xvz --strip-components 1
+          sudo mv k6 /usr/local/bin/
+
+      - name: Run k6 Load Test
+        run: k6 run performance-tests/bp-load-test.js
+        env:
+          APP_URL: 'https://bp-staging-nilavan.azurewebsites.net'
+
+  security-dast:
+    name: OWASP ZAP Pen Test
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.11.0
+        with:
+          target: 'https://bp-staging-nilavan.azurewebsites.net'
+          fail_action: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-prod:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [performance-test, security-dast]
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Publish App
+        run: dotnet publish BPCalculator/BPCalculator.csproj --configuration Release --output ./publish
+
+      - name: Deploy to Azure Production
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'bp-prod-nilavan'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_PROD }}
+          package: './publish'
+
+  health-check:
+    name: Production Health Check
+    runs-on: ubuntu-latest
+    needs: deploy-prod
+    steps:
+      - name: Check App is Responding
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://bp-prod-nilavan.azurewebsites.net)
+          if [ "$STATUS" != "200" ]; then
+            echo "Production health check failed: HTTP $STATUS"
+            exit 1
+          fi
+          echo "Production is healthy: HTTP $STATUS"
